@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0D0D0F;
+    color: #F9FAFB;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Custom Scrollbar applied globally */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0D0D0F;
+}
+::-webkit-scrollbar-thumb {
+  background: #7C3AED;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6D28D9;
+}
+
+/* Floating Animations */
+@keyframes orb-float-1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(40px, -60px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 30px) scale(0.95);
+  }
+}
+
+@keyframes orb-float-2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate(-50px, 40px) scale(0.9);
+  }
+}
+
+.animate-float-orb-1 {
+  animation: orb-float-1 20s infinite ease-in-out;
+}
+
+.animate-float-orb-2 {
+  animation: orb-float-2 25s infinite ease-in-out;
+}
+
+/* Hide scrollbars for specific horizontal lists but keep scroll functioning */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

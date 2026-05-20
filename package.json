@@ -1,0 +1,12 @@
+{
+  "name": "storyscape",
+  "version": "1.0.0",
+  "description": "StoryScape Full-Stack AI Story Sharing Web App",
+  "scripts": {
+    "install-all": "npm install && npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently \"npm run dev --prefix client\" \"npm start --prefix server\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -1,0 +1,72 @@
+# ===========================
+# Dependencies
+# ===========================
+node_modules/
+.pnp
+.pnp.js
+
+# ===========================
+# Environment / Secrets
+# ===========================
+.env
+.env.local
+.env.*.local
+
+# ===========================
+# Database (auto-generated at startup)
+# ===========================
+server/storyscape.db
+server/storyscape.db-journal
+server/storyscape.db-wal
+server/storyscape.db-shm
+
+# ===========================
+# AI-generated Media (large binary files)
+# ===========================
+server/public/covers/
+server/public/backgrounds/
+server/public/music/
+server/public/tts/
+
+# ===========================
+# User Uploads
+# ===========================
+server/uploads/
+
+# ===========================
+# Build Output
+# ===========================
+client/dist/
+client/build/
+
+# ===========================
+# Vite Cache
+# ===========================
+client/.vite/
+
+# ===========================
+# Logs
+# ===========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===========================
+# OS Files
+# ===========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===========================
+# IDEs
+# ===========================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
