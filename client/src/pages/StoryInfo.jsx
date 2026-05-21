@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Play, Heart, Bookmark, Eye, Sparkles, MapPin, Users, Info, ArrowRight } from 'lucide-react';
-import { getStory, likeStory, bookmarkStory, checkBookmark } from '../api/stories.js';
+import { getStory, likeStory, bookmarkStory, removeBookmark, checkUserStoryStatus } from '../api/stories.js';
 import ProgressScreen from '../components/ProgressScreen.jsx';
 import toast from 'react-hot-toast';
 
@@ -12,21 +12,24 @@ export default function StoryInfo() {
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const likeRequestRef = useRef(false);
 
   const fetchStoryDetails = async () => {
     try {
       const data = await getStory(id);
       setStory(data);
       
-      // If complete, check if user has bookmarked it
+      // If complete, check if user has bookmarked/liked it
       if (data.status === 'complete') {
         const token = localStorage.getItem('token');
         if (token) {
           try {
-            const status = await checkBookmark(id);
+            const status = await checkUserStoryStatus(id);
             setIsBookmarked(status.bookmarked);
+            setIsLiked(status.liked);
           } catch (e) {
-            console.error('Failed to check bookmark status:', e);
+            console.error('Failed to check story status:', e);
           }
         }
       }
@@ -44,14 +47,20 @@ export default function StoryInfo() {
   }, [id]);
 
   const handleLike = async () => {
-    if (isLiked) return;
+    if (likeLoading || likeRequestRef.current) return;
+    likeRequestRef.current = true;
+    setLikeLoading(true);
     try {
       const result = await likeStory(id);
       setStory((prev) => ({ ...prev, likes: result.likes }));
-      setIsLiked(true);
-      toast.success('Added to your likes!');
+      setIsLiked(result.liked);
+      toast.success(result.liked ? 'Added to your likes!' : 'Removed from likes');
     } catch (err) {
-      toast.error('Could not like story.');
+      const msg = err.response?.data?.error || 'Could not update like status.';
+      toast.error(msg);
+    } finally {
+      setLikeLoading(false);
+      likeRequestRef.current = false;
     }
   };
 
@@ -64,10 +73,15 @@ export default function StoryInfo() {
     }
 
     try {
-      // Toggle bookmark or initialize to 0% progress
-      await bookmarkStory(id, isBookmarked ? 0 : 0);
-      setIsBookmarked(!isBookmarked);
-      toast.success(isBookmarked ? 'Removed from Library' : 'Added to Library!');
+      if (isBookmarked) {
+        await removeBookmark(id);
+        setIsBookmarked(false);
+        toast.success('Removed from Library');
+      } else {
+        await bookmarkStory(id, 0);
+        setIsBookmarked(true);
+        toast.success('Added to Library!');
+      }
     } catch (err) {
       toast.error('Bookmark update failed.');
     }
@@ -98,22 +112,30 @@ export default function StoryInfo() {
   // Parse analysis details
   let analysis = {};
   try {
-    analysis = typeof story.analysis_json === 'string' 
-      ? JSON.parse(story.analysis_json) 
-      : story.analysis_json || {};
+    analysis = typeof story.analysis === 'string' 
+      ? JSON.parse(story.analysis) 
+      : story.analysis || {};
   } catch (err) {
-    console.error('JSON Parse error for analysis_json:', err);
+    console.error('JSON Parse error for analysis:', err);
   }
 
+  const normalizedSetting = typeof analysis.setting === 'string'
+    ? { location: analysis.setting, time: 'Story timeline' }
+    : analysis.setting || {};
+  const normalizedCharacters = (analysis.characters || []).map((char) => (
+    typeof char === 'string'
+      ? { name: char, description: 'Featured character' }
+      : char
+  ));
+
   const {
-    title = story.title,
     genre = story.genre,
     mood = 'Ethereal',
-    summary = 'No summary generated.',
-    characters = [],
-    setting = { location: 'Unknown Lands', time: 'Enchanted Age' },
+    plot_summary,
+    summary,
     themes = [],
   } = analysis;
+  const synopsis = plot_summary || summary || 'No summary generated.';
 
   return (
     <div className="flex-grow bg-background py-10 px-6 md:px-16 font-sans relative overflow-hidden">
@@ -163,10 +185,11 @@ export default function StoryInfo() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={handleLike}
-                disabled={isLiked}
+                disabled={likeLoading}
                 className={`py-3 rounded-full text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                  likeLoading ? 'opacity-50 cursor-wait' :
                   isLiked
-                    ? 'bg-red-500/10 text-red-400 border-red-500/20 cursor-not-allowed'
+                    ? 'bg-red-500/10 text-red-400 border-red-500/20'
                     : 'bg-card hover:bg-elevated border-white/5 text-muted hover:text-white'
                 }`}
               >
@@ -208,7 +231,7 @@ export default function StoryInfo() {
               <span>AI Story Synopsis</span>
             </h3>
             <p className="text-accent italic font-serif text-sm md:text-base leading-relaxed">
-              "{summary}"
+              "{synopsis}"
             </p>
           </div>
 
@@ -218,11 +241,11 @@ export default function StoryInfo() {
               <Users className="w-4.5 h-4.5 text-accent" />
               <span>Character Cast</span>
             </h3>
-            {characters.length === 0 ? (
+            {normalizedCharacters.length === 0 ? (
               <p className="text-muted text-xs font-semibold">No characters analyzed.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {characters.map((char, index) => (
+                {normalizedCharacters.map((char, index) => (
                   <div key={index} className="bg-card border border-white/5 p-5 rounded-2xl space-y-2">
                     <div className="flex justify-between items-start">
                       <h4 className="text-white text-xs font-extrabold">{char.name}</h4>
@@ -247,11 +270,11 @@ export default function StoryInfo() {
               <div className="text-xs space-y-2 font-medium">
                 <div>
                   <span className="text-muted block text-[10px] uppercase font-bold tracking-wider">Geography</span>
-                  <span className="text-white font-semibold mt-0.5 block">{setting.location || 'Spiritual Realm'}</span>
+                  <span className="text-white font-semibold mt-0.5 block">{normalizedSetting.location || normalizedSetting.description || 'Spiritual Realm'}</span>
                 </div>
                 <div className="pt-2 border-t border-white/5">
                   <span className="text-muted block text-[10px] uppercase font-bold tracking-wider">Timeline / Period</span>
-                  <span className="text-white font-semibold mt-0.5 block">{setting.time || 'Forgotten Era'}</span>
+                  <span className="text-white font-semibold mt-0.5 block">{normalizedSetting.time || 'Forgotten Era'}</span>
                 </div>
               </div>
             </div>

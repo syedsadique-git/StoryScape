@@ -51,6 +51,38 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (story_id) REFERENCES stories(id)
   );
+
+  CREATE TABLE IF NOT EXISTS likes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    story_id TEXT NOT NULL,
+    created_at INTEGER,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (story_id) REFERENCES stories(id),
+    UNIQUE(user_id, story_id)
+  );
+`);
+
+db.exec(`
+  DELETE FROM likes
+  WHERE rowid NOT IN (
+    SELECT MIN(rowid)
+    FROM likes
+    GROUP BY user_id, story_id
+  );
+
+  DELETE FROM bookmarks
+  WHERE rowid NOT IN (
+    SELECT MIN(rowid)
+    FROM bookmarks
+    GROUP BY user_id, story_id
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_likes_user_story
+    ON likes (user_id, story_id);
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_story
+    ON bookmarks (user_id, story_id);
 `);
 
 // Function to generate SVG placeholder

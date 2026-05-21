@@ -9,6 +9,7 @@ import db from '../db.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { runPipeline, activePipelines } from '../pipeline/runner.js';
 import { generateTTS } from '../pipeline/tts.js';
+import { generateMusic } from '../pipeline/music.js';
 
 // pdf-parse is a CommonJS module; use createRequire to import it in ESM
 const require = createRequire(import.meta.url);
@@ -91,12 +92,25 @@ router.get('/my/library', authMiddleware, (req, res) => {
 });
 
 // GET specific story details (and increment view count)
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(id);
     if (!story) {
       return res.status(404).json({ error: 'Story not found' });
+    }
+
+    if (story.status === 'complete' && !story.music_url) {
+      try {
+        const analysis = typeof story.analysis === 'string' ? JSON.parse(story.analysis) : {};
+        story.music_url = await generateMusic(story.id, {
+          genre: story.genre,
+          mood: analysis.mood || 'Ambient',
+        });
+        db.prepare('UPDATE stories SET music_url = ? WHERE id = ?').run(story.music_url, story.id);
+      } catch (musicError) {
+        console.error(`[Story Detail] Could not repair missing music for ${id}:`, musicError.message);
+      }
     }
 
     // Increment view count
@@ -151,7 +165,7 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
   // Handle file upload text extraction
   if (req.file) {
     try {
-      storyText = extractTextFromFile(req.file.path, req.file.mimetype);
+      storyText = await extractTextFromFile(req.file.path, req.file.mimetype);
       // Clean up temp file
       fs.unlinkSync(req.file.path);
     } catch (err) {
@@ -161,7 +175,7 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
     }
   }
 
-  if (!storyText || storyText.trim().length === 0) {
+  if (typeof storyText !== 'string' || storyText.trim().length === 0) {
     return res.status(400).json({ error: 'Story text content is required' });
   }
 
@@ -175,7 +189,10 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
     `).run(storyId, title, author, genre, storyText, req.user.id, now);
 
     // Run the pipeline asynchronously in background
-    runPipeline(storyId, storyText);
+    // .catch() prevents an unhandled rejection from crashing the Node.js process
+    runPipeline(storyId, storyText).catch((err) => {
+      console.error(`[Route] Pipeline rejected for ${storyId}:`, err.message);
+    });
 
     return res.status(201).json({ storyId, message: 'Story created. Pipeline initiated.' });
   } catch (error) {
@@ -184,30 +201,85 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
   }
 });
 
-// PUT like story (authenticated)
+// PUT toggle like story (authenticated)
 router.put('/:id/like', authMiddleware, (req, res) => {
-  const { id } = req.params;
+  const { id: storyId } = req.params;
+  const userId = req.user.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'User ID missing from token' });
+  }
+  
   try {
-    const result = db.prepare('UPDATE stories SET likes = likes + 1 WHERE id = ?').run(id);
-    if (result.changes === 0) {
+    // 1. Check if the story exists
+    const story = db.prepare('SELECT id, likes FROM stories WHERE id = ?').get(storyId);
+    if (!story) {
       return res.status(404).json({ error: 'Story not found' });
     }
-    const updated = db.prepare('SELECT likes FROM stories WHERE id = ?').get(id);
-    return res.json({ success: true, likes: updated.likes });
+
+    // 2. Execute toggle in a transaction and return the fresh count atomically.
+    // Seed stories contain display like totals without thousands of fixture rows,
+    // so adjust the stored aggregate instead of replacing it with COUNT(*).
+    const performToggle = db.transaction(() => {
+      const existingLike = db.prepare('SELECT id FROM likes WHERE user_id = ? AND story_id = ?').get(userId, storyId);
+      const currentStory = db.prepare('SELECT likes FROM stories WHERE id = ?').get(storyId);
+      let nextLikes = Math.max(0, currentStory?.likes || 0);
+
+      if (existingLike) {
+        // UNLIKE
+        db.prepare('DELETE FROM likes WHERE id = ?').run(existingLike.id);
+        nextLikes = Math.max(0, nextLikes - 1);
+      } else {
+        // LIKE
+        const likeId = `like-${uuidv4().substring(0, 8)}`;
+        db.prepare('INSERT INTO likes (id, user_id, story_id, created_at) VALUES (?, ?, ?, ?)').run(
+          likeId,
+          userId,
+          storyId,
+          Date.now()
+        );
+        nextLikes += 1;
+      }
+
+      db.prepare('UPDATE stories SET likes = ? WHERE id = ?').run(nextLikes, storyId);
+      return {
+        liked: !existingLike,
+        likes: nextLikes,
+      };
+    });
+
+    const toggleResult = performToggle();
+    return res.json({ 
+      success: true, 
+      likes: toggleResult.likes, 
+      liked: toggleResult.liked 
+    });
   } catch (error) {
-    console.error('Like story error:', error);
-    return res.status(500).json({ error: 'Failed to like story' });
+    console.error(`[Like Error] User ${userId} on Story ${storyId}:`, error);
+    return res.status(500).json({ error: 'Failed to update like' });
   }
 });
 
 // PUT bookmark progress (authenticated)
 router.put('/:id/bookmark', authMiddleware, (req, res) => {
   const { id: storyId } = req.params;
-  const { progress } = req.body; // percentage read, e.g., 14
+  const { progress, remove } = req.body; // percentage read, e.g., 14
   const userId = req.user.id;
 
   try {
+    const story = db.prepare('SELECT id FROM stories WHERE id = ?').get(storyId);
+    if (!story) {
+      return res.status(404).json({ error: 'Story not found' });
+    }
+
     const existing = db.prepare('SELECT * FROM bookmarks WHERE user_id = ? AND story_id = ?').get(userId, storyId);
+
+    if (remove) {
+      if (existing) {
+        db.prepare('DELETE FROM bookmarks WHERE id = ?').run(existing.id);
+      }
+      return res.json({ success: true, bookmarked: false, progress: 0 });
+    }
     
     if (existing) {
       db.prepare('UPDATE bookmarks SET progress = ?, created_at = ? WHERE id = ?').run(
@@ -223,23 +295,29 @@ router.put('/:id/bookmark', authMiddleware, (req, res) => {
       `).run(bookmarkId, userId, storyId, progress || 0, Date.now());
     }
 
-    return res.json({ success: true, progress });
+    return res.json({ success: true, bookmarked: true, progress: progress || 0 });
   } catch (error) {
     console.error('Bookmark story error:', error);
     return res.status(500).json({ error: 'Failed to bookmark story' });
   }
 });
 
-// GET bookmark status
+// GET bookmark and like status
 router.get('/:id/bookmarked', authMiddleware, (req, res) => {
   const { id: storyId } = req.params;
   const userId = req.user.id;
   try {
     const bookmark = db.prepare('SELECT progress FROM bookmarks WHERE user_id = ? AND story_id = ?').get(userId, storyId);
-    return res.json({ bookmarked: !!bookmark, progress: bookmark ? bookmark.progress : 0 });
+    const like = db.prepare('SELECT id FROM likes WHERE user_id = ? AND story_id = ?').get(userId, storyId);
+    
+    return res.json({ 
+      bookmarked: !!bookmark, 
+      progress: bookmark ? bookmark.progress : 0,
+      liked: !!like
+    });
   } catch (error) {
-    console.error('Check bookmark error:', error);
-    return res.status(500).json({ error: 'Failed to check bookmark status' });
+    console.error('Check status error:', error);
+    return res.status(500).json({ error: 'Failed to check story status' });
   }
 });
 

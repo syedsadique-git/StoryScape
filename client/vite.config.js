@@ -8,13 +8,30 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
-      }
+      },
+      // Static AI-generated assets served by Express — must be proxied in dev mode
+      '/covers': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/backgrounds': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/music': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/tts': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
     }
   }
 });

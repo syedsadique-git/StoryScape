@@ -6,32 +6,59 @@ import nodemailer from 'nodemailer';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { v4 as uuidv4 } from 'uuid';
+import dotenv from 'dotenv';
 import db from '../db.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'storyscape_super_secret_jwt_key_12345';
+dotenv.config();
 
-// Configure SMTP
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const router = express.Router();
+
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET || 'storyscape_super_secret_jwt_key_12345';
+  if (secret === 'storyscape_super_secret_jwt_key_12345' && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be configured in production');
+  }
+  return secret;
+}
+
+function signAuthToken(user) {
+  return jwt.sign(
+    { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
+    getJwtSecret(),
+    { expiresIn: '7d' }
+  );
+}
+
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+const isDevEmailFallback = process.env.NODE_ENV !== 'production' || !smtpUser || !smtpPass || smtpUser.includes('your_email');
+
+const transporter = smtpUser && smtpPass
+  ? nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: false,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    })
+  : null;
 
 async function sendOTPEmail(email, otp) {
-  const isDev = !process.env.SMTP_USER || process.env.SMTP_USER.includes('your_email');
-  
-  if (isDev) {
+  if (isDevEmailFallback) {
     console.log('\x1b[33m%s\x1b[0m', `==========================================`);
     console.log('\x1b[33m%s\x1b[0m', `[DEV OTP BYPASS] Email: ${email}`);
     console.log('\x1b[33m%s\x1b[0m', `[DEV OTP BYPASS] OTP Code: ${otp}`);
     console.log('\x1b[33m%s\x1b[0m', `==========================================`);
     return;
+  }
+
+  if (!transporter) {
+    throw new Error('SMTP transporter is not configured properly. Set SMTP_USER and SMTP_PASS.');
   }
 
   const mailOptions = {
@@ -64,7 +91,7 @@ if (googleClientId && googleClientId !== 'your_google_client_id' && googleClient
       {
         clientID: googleClientId,
         clientSecret: googleClientSecret,
-        callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/auth/google/callback',
+        callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5001/auth/google/callback',
       },
       (accessToken, refreshToken, profile, done) => {
         const email = profile.emails?.[0]?.value;
@@ -121,7 +148,11 @@ router.post('/register', async (req, res) => {
 
     await sendOTPEmail(email, otp);
 
-    return res.json({ message: 'OTP sent to email', email });
+    return res.json({
+      message: 'OTP sent to email',
+      email,
+      ...(isDevEmailFallback ? { otp } : {}),
+    });
   } catch (error) {
     console.error('Registration error:', error);
     return res.status(500).json({ error: 'Server error during registration' });
@@ -151,11 +182,7 @@ router.post('/verify-otp', async (req, res) => {
 
     db.prepare('UPDATE users SET is_verified = 1, otp = NULL, otp_expires_at = NULL WHERE id = ?').run(user.id);
 
-    const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = signAuthToken(user);
 
     return res.json({
       token,
@@ -196,14 +223,15 @@ router.post('/login', async (req, res) => {
       const otp_expires_at = Date.now() + 5 * 60 * 1000;
       db.prepare('UPDATE users SET otp = ?, otp_expires_at = ? WHERE id = ?').run(otp, otp_expires_at, user.id);
       await sendOTPEmail(email, otp);
-      return res.status(403).json({ error: 'Account not verified. OTP sent.', email, unverified: true });
+      return res.status(403).json({
+        error: 'Account not verified. OTP sent.',
+        email,
+        unverified: true,
+        ...(isDevEmailFallback ? { otp } : {}),
+      });
     }
 
-    const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = signAuthToken(user);
 
     return res.json({
       token,
@@ -239,7 +267,10 @@ router.post('/resend-otp', async (req, res) => {
     db.prepare('UPDATE users SET otp = ?, otp_expires_at = ? WHERE id = ?').run(otp, otp_expires_at, user.id);
     await sendOTPEmail(email, otp);
 
-    return res.json({ message: 'Verification code resent' });
+    return res.json({
+      message: 'Verification code resent',
+      ...(isDevEmailFallback ? { otp } : {}),
+    });
   } catch (error) {
     console.error('Resend OTP error:', error);
     return res.status(500).json({ error: 'Server error resending OTP' });
@@ -275,11 +306,7 @@ router.get(
       if (err || !user) {
         return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=oauth_failed`);
       }
-      const token = jwt.sign(
-        { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const token = signAuthToken(user);
       return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?token=${token}`);
     })(req, res, next);
   }

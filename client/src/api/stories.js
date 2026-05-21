@@ -40,7 +40,12 @@ export const bookmarkStory = async (id, progress) => {
   return response.data;
 };
 
-export const checkBookmark = async (id) => {
+export const removeBookmark = async (id) => {
+  const response = await api.put(`/stories/${id}/bookmark`, { remove: true });
+  return response.data;
+};
+
+export const checkUserStoryStatus = async (id) => {
   const response = await api.get(`/stories/${id}/bookmarked`);
   return response.data;
 };

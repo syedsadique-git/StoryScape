@@ -6,14 +6,15 @@ StoryScape is a full-stack web application that transforms written stories into 
 
 ## ✨ Features
 
-- **AI Story Analysis** — Google Gemini 2.5 Flash analyzes plot, themes, mood, and characters
-- **AI Cover Art** — FLUX.1-schnell / Stable Diffusion XL generates unique book covers
-- **AI Background Art** — Atmospheric scene art matching the story's setting
-- **AI Ambient Music** — Meta MusicGen composes a looping soundtrack per genre
-- **AI Voice Narration** — Multiple TTS voices (LJSpeech VITS, Bark, Coqui XTTS, MMS-TTS)
-- **Immersive Reader** — Chapter navigation, paragraph-level narration, dark/light theme
+- **AI Story Analysis** — Google Gemini 2.5 Flash analyzes plot, themes, mood, setting and characters
+- **AI Cover Art** — FLUX.1-schnell generates a unique book cover for every story
+- **AI Background Art** — Atmospheric scene art matching the story's setting and mood
+- **Ambient Soundtrack** — Per-story music placeholder (full music generation via Suno/Udio coming soon)
+- **AI Voice Narration** — Paragraph-by-paragraph narration using the browser's built-in Web Speech API
+- **Immersive Reader** — Chapter navigation, dark/light theme, font-size controls, fullscreen mode
 - **Auth System** — Email OTP verification, JWT sessions, Google OAuth
-- **Personal Library** — Bookmark stories and track reading progress
+- **Personal Library** — Bookmark stories and track chapter-level reading progress
+- **Explore & Genres** — Browse all stories or filter by genre
 
 ---
 
@@ -21,11 +22,12 @@ StoryScape is a full-stack web application that transforms written stories into 
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 18, Vite, Tailwind CSS, Framer Motion |
-| Backend | Node.js, Express, better-sqlite3 |
+| Frontend | React 18, Vite, Tailwind CSS |
+| Backend | Node.js, Express, better-sqlite3 (SQLite) |
 | Auth | JWT, bcryptjs, Passport.js (Google OAuth) |
-| AI Models | Google Gemini 2.5 Flash, FLUX.1, SDXL, MusicGen, Bark |
-| AI Infra | Hugging Face Inference API, Google AI Studio |
+| AI Analysis | Google Gemini 2.5 Flash |
+| AI Images | Hugging Face Inference API (FLUX.1-schnell) |
+| TTS | Browser Web Speech API (zero-latency, no API quota) |
 
 ---
 
@@ -37,7 +39,7 @@ StoryScape is a full-stack web application that transforms written stories into 
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/syedsadique-git/StoryScape.git
+git clone https://github.com/YOUR_USERNAME/StoryScape.git
 cd StoryScape
 ```
 
@@ -48,10 +50,10 @@ npm run install-all
 
 ### 3. Configure environment variables
 ```bash
-cp .env.example .env
+cp .env.example server/.env
 ```
 
-Open `.env` and fill in your API keys (see table below).
+Open `server/.env` and fill in your API keys (see table below).
 
 ### 4. Start development server
 ```bash
@@ -59,7 +61,7 @@ npm run dev
 ```
 
 - **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:5000
+- **Backend API**: http://localhost:5001
 
 ---
 
@@ -75,7 +77,7 @@ npm run dev
 | `SMTP_USER` | Your Gmail address | Optional |
 | `SMTP_PASS` | Gmail App Password | Optional |
 
-> **Note:** Email (SMTP) and Google OAuth are optional. In development mode, OTP codes are printed to the server console instead of being emailed.
+> **Note:** Email (SMTP) and Google OAuth are optional. In development mode, OTP codes are printed directly to the server console instead of being emailed.
 
 ---
 
@@ -92,17 +94,26 @@ StoryScape/
 ├── server/                  # Express backend
 │   ├── pipeline/            # AI generation pipeline
 │   │   ├── analyze.js       # Gemini story analysis
-│   │   ├── cover.js         # FLUX/SDXL cover generation
-│   │   ├── background.js    # SDXL background generation
-│   │   ├── music.js         # MusicGen soundtrack
-│   │   ├── tts.js           # Text-to-Speech narration
+│   │   ├── cover.js         # FLUX.1-schnell cover generation
+│   │   ├── background.js    # FLUX.1-schnell background generation
+│   │   ├── music.js         # Soundtrack placeholder (HF music unavailable)
+│   │   ├── tts.js           # TTS (delegates to browser Web Speech API)
 │   │   └── runner.js        # Orchestrates pipeline stages
 │   ├── routes/              # Express routers
 │   ├── middleware/          # JWT auth middleware
 │   └── db.js                # SQLite schema & seed data
-├── .env.example             # Environment variable template
+├── .env.example             # Environment variable template — copy to server/.env
 └── package.json             # Root scripts (dev, install-all)
 ```
+
+---
+
+## 🛡️ Security Notes
+
+- `server/.env` is in `.gitignore` and will **never** be committed
+- The SQLite database (`server/storyscape.db`) is also in `.gitignore`
+- AI-generated media (`server/public/covers/`, `backgrounds/`, `music/`) are excluded from git
+- Never commit real API keys; always use the `.env.example` as the template
 
 ---
 

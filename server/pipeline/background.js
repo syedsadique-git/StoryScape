@@ -17,14 +17,25 @@ export async function generateBackground(storyId, analysis) {
 
   let imageBuffer;
   try {
+    // Primary: FLUX.1-schnell (returns base64 JSON, decoded to Buffer by hfHelper)
     imageBuffer = await callHFModel(
-      'stabilityai/stable-diffusion-xl-base-1.0',
+      'black-forest-labs/FLUX.1-schnell',
       { inputs: prompt },
       'arraybuffer'
     );
   } catch (error) {
-    console.error('Background generation failed:', error.message);
-    throw new Error('Failed to generate story background image using SDXL.');
+    console.error('FLUX.1-schnell background generation failed, trying stable-diffusion-3-medium:', error.message);
+    try {
+      // Fallback: Stable Diffusion 3 Medium
+      imageBuffer = await callHFModel(
+        'stabilityai/stable-diffusion-3-medium-diffusers',
+        { inputs: prompt },
+        'arraybuffer'
+      );
+    } catch (fallbackError) {
+      console.error('SD3 Medium background generation also failed:', fallbackError.message);
+      throw new Error('Failed to generate story background image using AI models.');
+    }
   }
 
   // Ensure directories exist

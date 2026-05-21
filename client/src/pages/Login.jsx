@@ -24,6 +24,7 @@ export default function Login() {
   // Timer & loading states
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [devOtp, setDevOtp] = useState('');
   const [countdown, setCountdown] = useState(300); // 5 minutes
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
@@ -64,7 +65,7 @@ export default function Login() {
 
   const handleGoogleLogin = () => {
     // Forward directly to passport oauth route on server
-    window.location.href = 'http://localhost:5000/api/auth/google';
+    window.location.href = 'http://localhost:5001/api/auth/google';
   };
 
   const handleLoginSubmit = async (e) => {
@@ -75,7 +76,7 @@ export default function Login() {
     
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      const data = await login(email, password);
       toast.success('Logged in successfully!');
       const redirect = searchParams.get('redirect');
       navigate(redirect === 'upload' ? '/?upload=true' : '/');
@@ -83,6 +84,10 @@ export default function Login() {
       const resData = err.response?.data;
       if (err.response?.status === 403 && resData?.unverified) {
         setUnverifiedEmail(resData.email || email);
+        if (resData?.otp) {
+          setDevOtp(resData.otp);
+          toast.success(`Dev OTP: ${resData.otp}`);
+        }
         setActiveTab('otp');
         startOTPTimer();
         toast.error('Account not verified. Verification code sent.');
@@ -108,8 +113,12 @@ export default function Login() {
 
     setIsSubmitting(true);
     try {
-      await register(name, email, password);
+      const data = await register(name, email, password);
       setUnverifiedEmail(email);
+      if (data?.otp) {
+        setDevOtp(data.otp);
+        toast.success(`Dev OTP: ${data.otp}`);
+      }
       setActiveTab('otp');
       startOTPTimer();
       toast.success('Verification code sent to your email.');
@@ -173,7 +182,11 @@ export default function Login() {
 
   const handleResendOtp = async () => {
     try {
-      await resendOTP(unverifiedEmail);
+      const data = await resendOTP(unverifiedEmail);
+      if (data?.otp) {
+        setDevOtp(data.otp);
+        toast.success(`Dev OTP: ${data.otp}`);
+      }
       startOTPTimer();
       setOtpDigits(['', '', '', '', '', '']);
       otpInputsRef.current[0].focus();
@@ -405,6 +418,9 @@ export default function Login() {
               <div className="text-center">
                 <h3 className="text-sm font-bold text-white">Verification Code</h3>
                 <p className="text-muted text-[11px] mt-1.5 font-medium">We sent a 6-digit OTP code to <br/><span className="text-accent">{unverifiedEmail}</span></p>
+                {devOtp && (
+                  <p className="text-[11px] mt-2 text-accent font-semibold">Dev OTP: {devOtp}</p>
+                )}
               </div>
 
               {/* 6 Digit Individual boxes */}

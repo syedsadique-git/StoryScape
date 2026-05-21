@@ -2,50 +2,66 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { callHFModel } from './hfHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const ttsDir = path.join(__dirname, '..', 'public', 'tts');
 
-const VOICE_MODELS = {
-  aria: 'espnet/kan-bayashi_ljspeech_vits',
-  nova: 'facebook/mms-tts-eng',
-  echo: 'espnet/kan-bayashi_ljspeech_tacotron2',
-  sage: 'coqui/XTTS-v2',
-  spark: 'suno/bark',
+const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+
+const VOICE_PRESETS = {
+  af_heart: { voice: 'af_heart' },
+  af_bella: { voice: 'af_bella' },
+  af_nicole: { voice: 'af_nicole' },
+  af_sarah: { voice: 'af_sarah' },
+  am_fenrir: { voice: 'am_fenrir' },
+  am_michael: { voice: 'am_michael' },
+  am_puck: { voice: 'am_puck' },
+  bm_fable: { voice: 'bm_fable' },
 };
 
-export async function generateTTS(text, voicePreset = 'aria') {
-  const modelName = VOICE_MODELS[voicePreset.toLowerCase()] || VOICE_MODELS.aria;
-  
-  // Create a unique hash of text + voice model for caching
-  const hash = crypto.createHash('md5').update(text + modelName).digest('hex');
-  
-  const outputDir = path.resolve(__dirname, '../public/tts');
-  fs.mkdirSync(outputDir, { recursive: true });
-  
-  const filePath = path.join(outputDir, `${hash}.wav`);
-  const relativeUrl = `/tts/${hash}.wav`;
+let kokoroPromise;
 
-  // Return cached file if it exists
-  if (fs.existsSync(filePath)) {
-    console.log(`TTS cache hit for hash: ${hash}`);
-    return relativeUrl;
+async function getKokoro() {
+  if (!kokoroPromise) {
+    const { KokoroTTS } = await import('kokoro-js');
+    kokoroPromise = KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+      dtype: 'q8',
+      device: 'cpu',
+    });
+  }
+  return kokoroPromise;
+}
+
+function normalizeText(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1800);
+}
+
+export async function generateTTS(text, voicePreset = 'af_heart') {
+  const cleanText = normalizeText(text);
+  if (!cleanText) throw new Error('Text content is required for TTS');
+
+  const preset = VOICE_PRESETS[voicePreset] || VOICE_PRESETS.af_heart;
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${preset.voice}:${cleanText}`)
+    .digest('hex')
+    .slice(0, 24);
+  const filename = `${preset.voice}-${hash}.wav`;
+  const outputPath = path.join(ttsDir, filename);
+
+  if (fs.existsSync(outputPath)) {
+    return `/tts/${filename}`;
   }
 
-  console.log(`Generating TTS for model ${modelName} (cache miss)...`);
+  fs.mkdirSync(ttsDir, { recursive: true });
 
-  try {
-    const audioBuffer = await callHFModel(
-      modelName,
-      { inputs: text },
-      'arraybuffer'
-    );
+  const kokoro = await getKokoro();
+  const audio = await kokoro.generate(cleanText, { voice: preset.voice });
+  await audio.save(outputPath);
 
-    fs.writeFileSync(filePath, Buffer.from(audioBuffer));
-    return relativeUrl;
-  } catch (error) {
-    console.error(`TTS generation failed for model ${modelName}:`, error.message);
-    throw new Error(`Failed to generate speech using voice model: ${voicePreset}`);
-  }
+  return `/tts/${filename}`;
 }

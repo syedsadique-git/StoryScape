@@ -16,23 +16,23 @@ export async function generateCover(storyId, analysis) {
 
   let imageBuffer;
   try {
-    // Try FLUX.1-schnell first
+    // Primary: FLUX.1-schnell (returns base64 JSON, decoded to Buffer by hfHelper)
     imageBuffer = await callHFModel(
       'black-forest-labs/FLUX.1-schnell',
       { inputs: prompt },
       'arraybuffer'
     );
   } catch (error) {
-    console.error('FLUX cover generation failed, falling back to SDXL:', error.message);
+    console.error('FLUX.1-schnell cover generation failed, trying stable-diffusion-3-medium:', error.message);
     try {
-      // Fallback to SDXL
+      // Fallback: Stable Diffusion 3 Medium
       imageBuffer = await callHFModel(
-        'stabilityai/stable-diffusion-xl-base-1.0',
+        'stabilityai/stable-diffusion-3-medium-diffusers',
         { inputs: prompt },
         'arraybuffer'
       );
     } catch (fallbackError) {
-      console.error('SDXL cover generation failed:', fallbackError.message);
+      console.error('SD3 Medium cover generation also failed:', fallbackError.message);
       throw new Error('Failed to generate story cover art using AI models.');
     }
   }
