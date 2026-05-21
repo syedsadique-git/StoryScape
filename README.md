@@ -31,6 +31,17 @@ StoryScape is a full-stack web application that transforms written stories into 
 
 ---
 
+## Screenshots
+
+<img width="1469" height="717" alt="Screenshot 2026-05-21 at 8 14 24 PM" src="https://github.com/user-attachments/assets/60fafd69-0940-4b29-9587-32f4b5105d54" />
+<img width="1468" height="758" alt="Screenshot 2026-05-21 at 8 14 45 PM" src="https://github.com/user-attachments/assets/e838c3a3-66a2-450d-bc39-754a9c948061" />
+<img width="1468" height="759" alt="Screenshot 2026-05-21 at 8 15 05 PM" src="https://github.com/user-attachments/assets/e6419208-32ee-4f48-9a64-f7a9d6511f63" />
+<img width="1462" height="744" alt="Screenshot 2026-05-21 at 8 15 20 PM" src="https://github.com/user-attachments/assets/3a271fbc-f12d-4e4e-af82-34490592b09a" />
+
+
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -119,4 +130,14 @@ StoryScape/
 
 ## 📜 License
 
-MIT
+MIT — see [`LICENSE`](LICENSE).
+
+---
+
+## Acknowledgements
+
+- Google Antigravity 
+- Claude
+- https://github.com/satiricalguru
+- https://github.com/sourishnandy4-cell
+
