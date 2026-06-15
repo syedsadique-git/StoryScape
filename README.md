@@ -83,10 +83,10 @@ npm run dev
 | `GEMINI_API_KEY` | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) | ✅ Yes |
 | `HF_API_TOKEN` | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) | ✅ Yes |
 | `JWT_SECRET` | Any long random string | ✅ Yes |
-| `GOOGLE_CLIENT_ID` | [console.cloud.google.com](https://console.cloud.google.com) → OAuth 2.0 | Optional |
-| `GOOGLE_CLIENT_SECRET` | Same as above | Optional |
-| `SMTP_USER` | Your Gmail address | Optional |
-| `SMTP_PASS` | Gmail App Password | Optional |
+| `GOOGLE_CLIENT_ID` | [console.cloud.google.com](https://console.cloud.google.com) → OAuth 2.0 | ✅ Yes |
+| `GOOGLE_CLIENT_SECRET` | Same as above | ✅ Yes |
+| `SMTP_USER` | Your Gmail address | ✅ Yes |
+| `SMTP_PASS` | Gmail App Password | ✅ Yes |
 
 > **Note:** Email (SMTP) and Google OAuth are optional. In development mode, OTP codes are printed directly to the server console instead of being emailed.
 
